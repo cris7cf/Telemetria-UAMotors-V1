@@ -1,5 +1,5 @@
-# Archivos de entorno que contienen credenciales sensibles
-.env
+# Ignorar todos los archivos .env en cualquier carpeta
+**/.env
 
 # Directorios de entorno virtual
 venv_gateway/
