@@ -1,0 +1,17 @@
+# Archivos de entorno que contienen credenciales sensibles
+.env
+
+# Directorios de entorno virtual
+venv_gateway/
+venv_simulador/
+.venv/
+venv/
+env/
+
+# Archivos de Python generados automáticamente
+__pycache__/
+*.pyc
+
+# Archivos específicos del sistema operativo (macOS, Windows)
+.DS_Store
+Thumbs.db

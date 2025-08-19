@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Telemetría UAMotors (Live)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Telemetría en Vivo · UAMotors</h1>
+    <div class="muted" id="deviceId">dispositivo: —</div>
+  </header>
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab-button active" onclick="showTab('dashboard')">Dashboard</button>
+      <button class="tab-button" onclick="showTab('graphs')">Gráficas</button>
+      <button class="tab-button" onclick="showTab('deep_analysis')">Análisis Profundo</button>
+    </div>
+    <div id="dashboard" class="tab-content active">
+      <video class="video-background" controls autoplay loop muted>
+        <source src="/video/video_ejemplo.mp4" type="video/mp4">
+        Tu navegador no soporta el video.
+      </video>
+      <div class="dashboard-content">
+        <div class="kpis">
+          <div class="kpi"><div class="label">RPM</div><div class="val" id="kpi-rpm">—</div></div>
+          <div class="kpi"><div class="label">Temp. motor (°C)</div><div class="val" id="kpi-temp">—</div></div>
+          <div class="kpi"><div class="label">Acelerador</div><div class="val" id="kpi-acel">—</div></div>
+          <div class="kpi"><div class="label">Freno</div><div class="val" id="kpi-freno">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div id="graphs" class="tab-content">
+      <div class="grid">
+        <div class="card"><h2>rpm</h2><canvas id="rpmChart"></canvas></div>
+        <div class="card"><h2>Temperatura motor</h2><canvas id="tempChart"></canvas></div>
+        <div class="card"><h2>Posición acelerador</h2><canvas id="acelChart"></canvas></div>
+        <div class="card"><h2>Posición freno</h2><canvas id="frenoChart"></canvas></div>
+        <div class="card"><h2>Amortiguador 1</h2><canvas id="am0"></canvas></div>
+        <div class="card"><h2>Amortiguador 2</h2><canvas id="am1"></canvas></div>
+        <div class="card"><h2>Amortiguador 3</h2><canvas id="am2"></canvas></div>
+        <div class="card"><h2>Amortiguador 4</h2><canvas id="am3"></canvas></div>
+      </div>
+    </div>
+    <div id="deep_analysis" class="tab-content">
+      <div class="grid">
+        <div class="card"><h2>Steer Angle vs Torque (Ejemplo)</h2><canvas id="steerTorqueChart"></canvas></div>
+        <div class="card"><h2>Friction Circle (Ejemplo)</h2><canvas id="frictionCircleChart"></canvas></div>
+        <div class="card"><h2>Steer vs Lat (Ejemplo)</h2><canvas id="steerLatChart"></canvas></div>
+        <div class="card" style="grid-column: span 2;">
+          <h2>Trazado en Pista (Ejemplo)</h2>
+          <img src="https://placehold.co/800x400/eeeeee/000000?text=Mapa+de+Pista+con+Datos" alt="Mapa de Pista con Datos" style="width:100%; border-radius:8px;">
+          <p class="muted" style="margin-top:10px;">Aquí se mostrarían datos superpuestos sobre el trazado del circuito.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const API_BASE = (location.protocol + '//' + location.hostname + ':5000');
+    const HISTORY_URL = `${API_BASE}/api/telemetria/datos?n=60&range=-30m`;
+    const LAST_URL = `${API_BASE}/api/telemetria/ultimo`;
+    const STREAM_URL = `${API_BASE}/api/telemetria/stream`;
+
+    const charts = {};
+    const buffers = {};
+    const MAX_POINTS = 120;
+
+    function createSeriesChart(id, suggestedMin = null, suggestedMax = null) {
+      const ctx = document.getElementById(id)?.getContext('2d');
+      if (!ctx) return;
+      buffers[id] = [];
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: id,
+            data: [],
+            fill: false,
+            tension: 0.15
+          }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          scales: {
+            x: {
+              ticks: {
+                maxRotation: 0,
+                autoSkip: true
+              }
+            },
+            y: {
+              suggestedMin,
+              suggestedMax
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+
+    createSeriesChart('rpmChart');
+    createSeriesChart('tempChart');
+    createSeriesChart('acelChart', 0, 1);
+    createSeriesChart('frenoChart', 0, 1);
+    createSeriesChart('am0');
+    createSeriesChart('am1');
+    createSeriesChart('am2');
+    createSeriesChart('am3');
+    createSeriesChart('steerTorqueChart');
+    createSeriesChart('frictionCircleChart');
+    createSeriesChart('steerLatChart');
+
+    function pushPoint(id, t, v) {
+      const arr = buffers[id];
+      if (!arr) return;
+      arr.push({
+        t,
+        v
+      });
+      if (arr.length > MAX_POINTS) arr.shift();
+      if (charts[id]) {
+        charts[id].data.labels = arr.map(p => new Date(p.t * 1000).toLocaleTimeString());
+        charts[id].data.datasets[0].data = arr.map(p => p.v);
+        charts[id].update();
+      }
+    }
+
+    const setTxt = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    function applyLatest(payload) {
+      if (!payload) return;
+      const ts = (payload.rpm && payload.rpm.timestamp) || Math.floor(Date.now() / 1000);
+      const dev = (payload.rpm && payload.rpm.device_id) || '—';
+      setTxt('deviceId', `dispositivo: ${dev}`);
+      if (payload.rpm) {
+        setTxt('kpi-rpm', Math.round(payload.rpm.value));
+        pushPoint('rpmChart', ts, payload.rpm.value);
+      }
+      if (payload.temp_motor) {
+        setTxt('kpi-temp', payload.temp_motor.value.toFixed(1));
+        pushPoint('tempChart', ts, payload.temp_motor.value);
+      }
+      if (payload.pos_acelerador) {
+        setTxt('kpi-acel', payload.pos_acelerador.value.toFixed(2));
+        pushPoint('acelChart', ts, payload.pos_acelerador.value);
+      }
+      if (payload.pos_freno) {
+        setTxt('kpi-freno', payload.pos_freno.value.toFixed(2));
+        pushPoint('frenoChart', ts, payload.pos_freno.value);
+      }
+      for (let i = 0; i < 4; i++) {
+        const key = `desplazamiento_amortiguador_${i}`;
+        if (payload[key]) {
+          pushPoint(['am0', 'am1', 'am2', 'am3'][i], ts, payload[key].value);
+        }
+      }
+    }
+
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.getElementById(tabId).classList.add('active');
+      document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`).classList.add('active');
+      setTimeout(() => {
+        for (const chartId in charts) {
+          if (charts[chartId]) {
+            charts[chartId].resize();
+            charts[chartId].update();
+          }
+        }
+      }, 100);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      showTab('dashboard');
+      fetch(HISTORY_URL)
+        .then(r => r.json())
+        .then(data => {
+          const map = {
+            rpm: 'rpmChart',
+            temp_motor: 'tempChart',
+            pos_acelerador: 'acelChart',
+            pos_freno: 'frenoChart',
+            desplazamiento_amortiguador_0: 'am0',
+            desplazamiento_amortiguador_1: 'am1',
+            desplazamiento_amortiguador_2: 'am2',
+            desplazamiento_amortiguador_3: 'am3'
+          };
+          for (const key in map) {
+            (data[key] || []).forEach(d => pushPoint(map[key], d.timestamp, d.value));
+          }
+        })
+        .catch(console.error);
+      setInterval(() => {
+        fetch(LAST_URL).then(r => r.json()).then(applyLatest).catch(() => {});
+      }, 2000);
+      if (!!window.EventSource) {
+        const sse = new EventSource(STREAM_URL);
+        sse.onmessage = (ev) => {
+          try {
+            const payload = JSON.parse(ev.data);
+            applyLatest(payload);
+          } catch (e) {
+            console.error("Error al procesar SSE payload:", e);
+          }
+        };
+        sse.onerror = (e) => {
+          console.error("Error en SSE:", e);
+        };
+      }
+    });
+  </script>
+</body>
+</html>
