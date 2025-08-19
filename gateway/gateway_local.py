@@ -22,7 +22,7 @@ CORS(app, resources={r"/api/*": {"origins": os.getenv("CORS_ORIGINS", "*")}, r"/
 
 # InfluxDB config
 URL_INFLUXDB = os.getenv("INFLUXDB_URL", "http://localhost:8086")
-TOKEN_INFLUXDB = os.getenv("INFLUXDB_TOKEN", "wQESMnXzNffMLbp3Rz6slX52v651FaeCarUQKMV6V0ytTEXQAwfBXkdJwXfAqj1kmrw_gmLCZFkCXZpiEKfwGw==")
+TOKEN_INFLUXDB = os.getenv("INFLUXDB_TOKEN", "")
 ORG_INFLUXDB = os.getenv("INFLUXDB_ORG", "UAMotors")
 BUCKET_INFLUXDB = os.getenv("INFLUXDB_BUCKET", "telemetria")
 TIME_PRECISION = os.getenv("TIME_PRECISION", "ns")
